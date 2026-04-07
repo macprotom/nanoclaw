@@ -34,6 +34,7 @@ import {
   getLastGroupSync,
   getMessageContentById,
   setLastGroupSync,
+  storeMessageDirect,
   updateChatName,
 } from '../db.js';
 import { isImageMessage, processImage } from '../image.js';
@@ -388,6 +389,17 @@ export class WhatsAppChannel implements Channel {
           const oldest = this.sentMessageCache.keys().next().value!;
           this.sentMessageCache.delete(oldest);
         }
+        // Persist to DB so getMessage survives restarts
+        storeMessageDirect({
+          id: sent.key.id,
+          chat_jid: jid,
+          sender: 'me',
+          sender_name: ASSISTANT_NAME,
+          content: prefixed,
+          timestamp: new Date().toISOString(),
+          is_from_me: true,
+          is_bot_message: true,
+        });
       }
       logger.info({ jid, length: prefixed.length }, 'Message sent');
     } catch (err) {
@@ -566,6 +578,16 @@ export class WhatsAppChannel implements Channel {
         const sent = await this.sock.sendMessage(item.jid, { text: item.text });
         if (sent?.key?.id && sent.message) {
           this.sentMessageCache.set(sent.key.id, sent.message);
+          storeMessageDirect({
+            id: sent.key.id,
+            chat_jid: item.jid,
+            sender: 'me',
+            sender_name: ASSISTANT_NAME,
+            content: item.text,
+            timestamp: new Date().toISOString(),
+            is_from_me: true,
+            is_bot_message: true,
+          });
         }
         logger.info(
           { jid: item.jid, length: item.text.length },
